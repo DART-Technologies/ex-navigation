@@ -825,7 +825,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   defaultSceneStyle: {
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
   },
   routeContainer: {
     flex: 1,
