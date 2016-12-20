@@ -191,7 +191,7 @@ from the stack by calling those functions on the `navigator` prop. This
 is a prop that is passed into all components that you registered with
 the router. If you need to access the `navigator` on a component that
 is not a route, you can either pass it in manually from your route
-component use `withNavigation` as a decorator on the component:
+component or use `withNavigation` as a decorator on the component:
 
 ```javascript
 import React from 'react';
@@ -211,6 +211,19 @@ class BackButton extends React.Component {
   }
 }
 ```
+
+Alternatively, rather than importing `Router` each time, you may pass the
+route's name directly:
+
+```diff
+_goToAbout = () => {
+-  this.props.navigator.push(Router.getRoute('about'));
++  this.props.navigator.push('about');
+}
+```
+
+… bearing in mind you will loose the ability to type check the route (if using
+Flow).
 
 ## Passing params to a route
 
@@ -313,14 +326,9 @@ on the left or right of the title.
 
 ```javascript
 
- @connect()
- class SignOutButton extends React.Component {
-   render() {
-      return (
-        <TouchableOpacity onPress={this.props.dispatch(Actions.signOut())}>
-          <Text>Sign out</Text>
-        </TouchableOpacity>
-      );
+ class HomeScreen extends React.Component {
+   _goToAbout = () => {
+     this.props.navigator.push(Router.getRoute('about', {name: 'Brent'}));
    }
  }
 
@@ -328,11 +336,22 @@ on the left or right of the title.
    static route = {
      navigationBar: {
        title: 'Title goes here',
-       renderRight: (route, props) => <SignOutButton />
+       renderRight: (route, props) => <SignOutButton name={route.params.name} />
      }
    }
 
    // ...
+ }
+ 
+ @connect()
+ class SignOutButton extends React.Component {
+   render() {
+      return (
+        <TouchableOpacity onPress={this.props.dispatch(Actions.signOut())}>
+          <Text>Sign out {this.props.name}</Text>
+        </TouchableOpacity>
+      );
+   }
  }
 ```
 
@@ -399,7 +418,7 @@ import {
 
 
 // Treat the TabScreen route like any other route -- you may want to set
-// it as the intiial route for a top-level StackNavigation
+// it as the initial route for a top-level StackNavigation
 class TabScreen extends React.Component {
   static route = {
     navigationBar: {
@@ -654,4 +673,42 @@ export default function goHome() {
   let navigatorUID = Store.getState().navigation.currentNavigatorUID;
   Store.dispatch(NavigationActions.push(navigatorUID, Router.getRoute('home')))
 }
+```
+
+### Screen Tracking / Analytics
+
+You might want to do some screen tracking in your apps. Since the entire navigation state is in redux, screen tracking is as simple as writing a redux middleware. Below is a simple middleware that uses `routeName` as the screen name for tracking screens.
+
+```javascript
+import SegmentIO from 'react-native-segment-io-analytics';
+
+const navigationStateKey = 'navigation';
+
+// gets the current screen from navigation state
+function getCurrentScreen(getStateFn) {
+  const navigationState = getStateFn()[navigationStateKey];
+  // navigationState can be null when exnav is initializing
+  if (!navigationState) return null;
+
+  const { currentNavigatorUID, navigators } = navigationState;
+  if (!currentNavigatorUID) return null;
+
+  const { index, routes } = navigators[currentNavigatorUID];
+  const { routeName } = routes[index];
+  return routeName;
+}
+
+const screenTracking = ({ getState }) => next => action => {
+  if (!action.type.startsWith('EX_NAVIGATION')) return next(action);
+  const currentScreen = getCurrentScreen(getState);
+  const result = next(action);
+  const nextScreen = getCurrentScreen(getState);
+  if (nextScreen !== currentScreen) {
+    SegmentIO.screen(nextScreen);
+  }
+  return result;
+}
+
+export default screenTracking;
+
 ```
